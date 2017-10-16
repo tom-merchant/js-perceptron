@@ -6,7 +6,7 @@ window.nn.activationFunctions = {
   ***/
   identity: function(wa)
   {
-      return wa;
+    return wa;
   },
   /***
   *logistic sigmoid activation function
@@ -14,7 +14,7 @@ window.nn.activationFunctions = {
   ***/
   logistic: function(wa)
   {
-      return 1/(1 + Math.exp(-wa));
+    return 1/(1 + Math.exp(-wa));
   },
   dlogistic: function(x)
   {
@@ -27,7 +27,7 @@ window.nn.activationFunctions = {
   ***/
   tanh: function(wa)
   {
-      return Math.tanh(wa);
+    return Math.tanh(wa);
   },
   dtanh: function(x)
   {
@@ -39,7 +39,7 @@ window.nn.activationFunctions = {
   ***/
   gaussian: function(wa)
   {
-      return Math.exp(-(wa*wa));
+    return Math.exp(-(wa*wa));
   },
   dgaussian: function(x)
   {
@@ -206,8 +206,10 @@ window.nn.newValueMatrix = function(layers, width, inputs, outputs)
 *@param [Number] width The nmber of nodes in each hidden layer
 *@param [Number] outputs The number of output neurons
 *@param [Function] ϕ The activation function to use
+*@param [Function] d The derivative of the activation function
+*@param [Number] α The learning rate
 ***/
-window.nn.NNet = function(inputs, layers, width, outputs, ϕ, dϕ)
+window.nn.NNet = function(inputs, layers, width, outputs, ϕ, dϕ, α)
 {
     this.layers = layers;
     this.inputs = inputs;
@@ -216,6 +218,8 @@ window.nn.NNet = function(inputs, layers, width, outputs, ϕ, dϕ)
     
     this.ϕ = ϕ || activationFunctions.identity;
     this.dϕ = dϕ || function(){return 1;};
+    
+    this.α = α || 0.7;
     
     this.weights = window.nn.util.newWeightMatrix(layers, width, inputs, outputs);
     this.values = window.nn.util.newValueMatrix(layers, width, inputs, outputs);
@@ -324,12 +328,12 @@ window.nn.NNet.prototype.setLossFunction = function(L, dL)
 
 window.nn.NNet.prototype.L = function(expected, output)
 {
-    return Math.pow(expected - output, 2);
+    return 0.5 * Math.pow(expected - output, 2);
 };
 
 window.nn.NNet.prototype.dL = function(expected, output)
 {
-    return 2 * (expected - output);
+    return (output - expected);
 };
 
 window.nn.NNet.prototype.propagate = function()
@@ -351,11 +355,95 @@ window.nn.NNet.prototype.propagate = function()
     }
 }
 
+window.nn.NNet.prototype.getNNodes(layer)
+{
+    this.assertLayer(layer);
+    
+    if(layer == 0)
+    {
+        return this.inputs;
+    }
+    else if(layer < this.layers)
+    {
+        return this.width;
+    }
+    else
+    {
+        return this.outputs
+    }
+    
+}
+
+window.nn.backPropagate =  function(layer, dl, outputNeuron, expectedValue, matrix, _this)
+{
+    if(layer === _this.layers+1)
+    {
+        var deltaMatrix = window.nn.newWeightMatrix(_this.layers, _this.width, _this.inputs, _this.outputs);
+        var L = _this.L(expectedValue, _this.getOutputs()[outputNeuron])
+        var dL = _this.dL(expectedValue, _this.getOutputs()[outputNeuron]);
+        return backPropagate(layer - 1, dL, outputNeuron, expectedValue, newMatrix, _this);
+    }
+    else if(layer < _this.layers+1)
+    {
+        for(var node = 0; node < this.getNNodes(layer); node++)
+        {
+            //dL can be summarised as the error of the output node
+            //dw gives us our contribution to the output node
+            //dL * dw gives us our relative error for this node
+            
+            var δw = _this.dϕ(_this.getValue(layer, node) * _this.getWeight(layer, node, outputNeuron));
+            var δL = dl * δw;
+            
+            var Δw = -_this.α * δL;
+            
+            //This bit of code is fairly ugly, but I don't want to add a paramter to the function so this is how we'll do it
+            var wPtr = _this.weights;
+            _this.weights = matrix;
+            _this.setWeight(layer, node, outputNeuron, Δw);
+            _this.weights = wPtr;
+            
+            return backPropagate(layer-1, δL, node, 0, matrix, _this);
+        }
+    }
+    else
+    {
+        //base case, ultimately we want to return the matrix of weight deltas we have constructed
+        return matrix;
+    }
+}
+
 /***
+ *Back propagation training
  * 
  *@param dataset an array of object of form {inputs: [1, 2, etc...], outputs: [0, 1, 0, etc...]}
  ***/
 window.nn.NNet.prototype.train = function(dataset)
 {
+    //The idea is to propagate the dataset values forward through the neural net
+    //Once we have done that, the Loss function can be evaluated as a function of y
+    //where y = a(x) where a is one path of our net and x is the set of inputs
+    //We ultimately need to calculate the Loss function for each output and work out
+    //the derivative of the Loss function with respect to specific weightings in our network
     
+    //Error in output = (change in loss / change in output neuron) * dϕ(input to output node)
+    
+    //Delta rule
+    //dW = -α * dL * dϕ(wt)
+    //Change in loss with respect to any weight = ϕ(input*(loss of the neuron))
+    
+    for(var data in dataset)
+    {
+        this.setInputs(data.inputs);
+        this.propagate();
+        
+        
+        
+        var matrices = [];
+        
+        for(var o = 0; o < this.outputs; o++)
+        {
+            matrices.push(window.nn.backPropagate(this.layers+1, 0, o, data.outputs[o], null, this));
+        }
+        //TODO: Now we simply add all the weights in all these matrices to the weight matrix
+    }
 }
