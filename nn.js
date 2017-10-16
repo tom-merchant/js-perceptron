@@ -379,7 +379,7 @@ window.nn.backPropagate =  function(layer, dl, outputNeuron, expectedValue, matr
     if(layer === _this.layers+1)
     {
         var deltaMatrix = window.nn.newWeightMatrix(_this.layers, _this.width, _this.inputs, _this.outputs);
-        var L = _this.L(expectedValue, _this.getOutputs()[outputNeuron])
+        var L = _this.L(expectedValue, _this.getOutputs()[outputNeuron]);
         var dL = _this.dL(expectedValue, _this.getOutputs()[outputNeuron]);
         return backPropagate(layer - 1, dL, outputNeuron, expectedValue, newMatrix, _this);
     }
@@ -391,7 +391,7 @@ window.nn.backPropagate =  function(layer, dl, outputNeuron, expectedValue, matr
             //dw gives us our contribution to the output node
             //dL * dw gives us our relative error for this node
             
-            var δw = _this.dϕ(_this.getValue(layer, node) * _this.getWeight(layer, node, outputNeuron));
+            var δw = _this.getValue(layer, node) * _this.dϕ(_this.getValue(layer, node) * _this.getWeight(layer, node, outputNeuron));
             var δL = dl * δw;
             
             var Δw = -_this.α * δL;
