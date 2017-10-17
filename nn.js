@@ -1,3 +1,8 @@
+/*
+* nn.js Tom Merchant 2017
+* simple perceptron neural network implementation
+*/
+
 
 window.nn.activationFunctions = {
   /***
@@ -127,16 +132,16 @@ window.nn.activationFunctions = {
   }
 };
 
-window.nn.util.new2dArray = function(width, height)
+window.nn.util.new2dArray = function(width, height, random)
 {
     var array = [];
     
-    for(i = 0; i < width; i++)
+    for(var i = 0; i < width; i++)
     {
         array[i] = [];
-        for(j = 0; j < height; j++)
+        for(var j = 0; j < height; j++)
         {
-            array[i][j] = 0;
+            array[i][j] = 0 + random * (Math.random()-0.5);
         }
     }
     
@@ -152,15 +157,15 @@ window.nn.util.newWeightMatrix = function(layers, width, inputs, outputs)
     {
         if(layer === 0)
         {
-            matrix[0] = window.nn.util.new2dArray(inputs, width);
+            matrix[0] = window.nn.util.newr2dArray(inputs, width, true);
         }
         else if(layer < layers)
         {
-            matrix[layer] = window.nn.util.new2dArray(width, width);
+            matrix[layer] = window.nn.util.newr2dArray(width, width, true);
         }
         else
         {
-            matrix[layers] = window.nn.util.new2dArray(width, outputs);
+            matrix[layers] = window.nn.util.newr2dArray(width, outputs, true);
         }
     }
     
@@ -208,11 +213,13 @@ window.nn.newValueMatrix = function(layers, width, inputs, outputs)
 *@param [Function] ϕ The activation function to use
 *@param [Function] d The derivative of the activation function
 *@param [Number] α The learning rate
+*@param [Boolean] notbias Whether to not use a bias input node
 ***/
-window.nn.NNet = function(inputs, layers, width, outputs, ϕ, dϕ, α)
+window.nn.NNet = function(inputs, layers, width, outputs, ϕ, dϕ, α, notbias)
 {
     this.layers = layers;
-    this.inputs = inputs;
+    this.inputs = inputs+(1 * (!notbias));
+    this.notbias = notbias;
     this.width = width;
     this.outputs = outputs;
     
@@ -221,8 +228,8 @@ window.nn.NNet = function(inputs, layers, width, outputs, ϕ, dϕ, α)
     
     this.α = α || 0.7;
     
-    this.weights = window.nn.util.newWeightMatrix(layers, width, inputs, outputs);
-    this.values = window.nn.util.newValueMatrix(layers, width, inputs, outputs);
+    this.weights = window.nn.util.newWeightMatrix(layers, width, this.inputs, outputs);
+    this.values = window.nn.util.newValueMatrix(layers, width, this.inputs, outputs);
     return this;
 };
 
@@ -284,6 +291,11 @@ window.nn.NNet.prototype.setInputs = function(inputs)
     if(this.inputs.length === inputs.length)
     {
         this.values[0] = inputs;
+        
+        if(!this.notbias)
+        {
+            this.values[0].append(1);
+        }
     }
     else
     {
@@ -293,7 +305,12 @@ window.nn.NNet.prototype.setInputs = function(inputs)
 
 window.nn.NNet.prototype.getInputs = function()
 {
-    return this.values[0];
+    var inputs = this.values[0].slice(0);
+    if(!this.notbias)
+    {
+        inputs.pop();
+    }
+    return inputs;
 };
 
 window.nn.NNet.prototype.getOutputs = function()
@@ -374,7 +391,7 @@ window.nn.NNet.prototype.getNNodes(layer)
     
 }
 
-window.nn.backPropagate =  function(layer, dl, outputNeuron, expectedValue, matrix, _this)
+window.nn.backPropagate = function(layer, dl, outputNeuron, expectedValue, matrix, _this)
 {
     if(layer === _this.layers+1)
     {
@@ -402,7 +419,12 @@ window.nn.backPropagate =  function(layer, dl, outputNeuron, expectedValue, matr
             _this.setWeight(layer, node, outputNeuron, Δw);
             _this.weights = wPtr;
             
-            return backPropagate(layer-1, δL, node, 0, matrix, _this);
+            var nm = backPropagate(layer-1, δL, node, 0, matrix, _this);
+            
+            if(node == this.getNNodes(layer)-1)
+            {
+                return nm;
+            }
         }
     }
     else
@@ -411,6 +433,20 @@ window.nn.backPropagate =  function(layer, dl, outputNeuron, expectedValue, matr
         return matrix;
     }
 }
+
+window.nn.NNet.prototype.addMatrix = function(matrix)
+{
+    for(var i = 0; i < matrix.length; i++)
+    {
+        for(var j = 0; j < matrix[i].length; j++)
+        {
+            for(var k = 0; k < matrix[i][j].length; k++)
+            {
+                this.weights[i][j][k] += matrix[i][j][k];
+            }
+        }
+    }
+};
 
 /***
  *Back propagation training
@@ -444,6 +480,11 @@ window.nn.NNet.prototype.train = function(dataset)
         {
             matrices.push(window.nn.backPropagate(this.layers+1, 0, o, data.outputs[o], null, this));
         }
-        //TODO: Now we simply add all the weights in all these matrices to the weight matrix
+        
+        //Now we simply add all the weights in all these matrices to the weight matrix
+        while(var m = 0; m < matrices.length; m++)
+        {
+            this.addMatrix(matrices[m]);
+        }
     }
 }
