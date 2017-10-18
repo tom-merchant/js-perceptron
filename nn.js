@@ -94,7 +94,7 @@ window.nn.activationFunctions.bentIdentity = function(wa)
 window.nn.activationFunctions.dbentIdentity = function(x)
 {
     return x / (2*Math.sqrt(x*x + 1)) + 1;
-}
+};
 
 /***
 *A little pointless, basically just wraps Math.sin
@@ -176,28 +176,28 @@ window.nn.util.newWeightMatrix = function(layers, width, inputs, outputs)
     {
         if(layer === 0)
         {
-            matrix[0] = window.nn.util.newr2dArray(inputs, width, true);
+            matrix[0] = window.nn.util.new2dArray(inputs, width, true);
         }
         else if(layer < layers)
         {
-            matrix[layer] = window.nn.util.newr2dArray(width, width, true);
+            matrix[layer] = window.nn.util.new2dArray(width, width, true);
         }
         else
         {
-            matrix[layers] = window.nn.util.newr2dArray(width, outputs, true);
+            matrix[layers] = window.nn.util.new2dArray(width, outputs, true);
         }
     }
 
     return matrix;
 };
 
-window.nn.newValueMatrix = function(layers, width, inputs, outputs)
+window.nn.util.newValueMatrix = function(layers, width, inputs, outputs)
 {
-    layers = [];
+    var nlayers = [];
 
     for(var i = 0; i < layers+2; i++)
     {
-        layers[i] = [];
+        nlayers[i] = [];
 
         var s;
 
@@ -205,7 +205,7 @@ window.nn.newValueMatrix = function(layers, width, inputs, outputs)
         {
             s = inputs;
         }
-        else if(i < layers)
+        else if(i <= layers)
         {
             s = width;
         }
@@ -216,10 +216,10 @@ window.nn.newValueMatrix = function(layers, width, inputs, outputs)
 
         for(var m = 0; m < s; m++)
         {
-            layers[i][m] = 0;
+            nlayers[i][m] = 0;
         }
     }
-    return layers;
+    return nlayers;
 };
 
 /***
@@ -245,10 +245,11 @@ window.nn.NNet = function(inputs, layers, width, outputs, phi, dphi, alpha, notb
     this.phi = phi || activationFunctions.identity;
     this.dphi = dphi || function(){return 1;};
 
-    this.alpha = alpha || 0.7;
+    this.alpha = alpha || 0.2;
 
     this.weights = window.nn.util.newWeightMatrix(layers, width, this.inputs, outputs);
     this.values = window.nn.util.newValueMatrix(layers, width, this.inputs, outputs);
+
     return this;
 };
 
@@ -285,7 +286,8 @@ window.nn.NNet.prototype.assertLayer = function(layer)
 window.nn.NNet.prototype.assertNeuron = function(layer, neuron)
 {
     this.assertLayer(layer);
-    if(layer === 0 && neuron >= this.inputs || layer < this.layers && neuron >= width || neuron >= this.outputs)
+
+    if((layer === 0 && neuron > this.inputs) || (layer <= this.layers && neuron > this.width) || (layer === this.layers+1 && neuron >= this.outputs))
     {
         throw "No such neuron";
     }
@@ -307,13 +309,13 @@ window.nn.NNet.prototype.setValue = function(layer, neuron, value)
 
 window.nn.NNet.prototype.setInputs = function(inputs)
 {
-    if(this.inputs.length === inputs.length)
+    if(this.inputs - (1*(!this.notbias)) === inputs.length)
     {
-        this.values[0] = inputs;
+        this.values[0] = inputs.slice(0);
 
         if(!this.notbias)
         {
-            this.values[0].append(1);
+            this.values[0].push(1);
         }
     }
     else
@@ -334,7 +336,7 @@ window.nn.NNet.prototype.getInputs = function()
 
 window.nn.NNet.prototype.getOutputs = function()
 {
-    return this.values[this.layers];
+    return this.values[this.layers+1];
 };
 
 window.nn.NNet.prototype.processLayer = function(layer, inputs, outputs)
@@ -349,7 +351,6 @@ window.nn.NNet.prototype.processLayer = function(layer, inputs, outputs)
         {
             var val = this.getValue(layer, n1);
             var weight = this.getWeight(layer, n1, n2);
-
             wa += val * weight;
         }
 
@@ -364,19 +365,19 @@ window.nn.NNet.prototype.setLossFunction = function(L, dL)
 
 window.nn.NNet.prototype.L = function(expected, output)
 {
-    return 0.5 * Math.pow(expected - output, 2);
+    return Math.pow(expected - output, 2);
 };
 
 window.nn.NNet.prototype.dL = function(expected, output)
 {
-    return (output - expected);
+    return 2 * (expected - output);
 };
 
 window.nn.NNet.prototype.propagate = function()
 {
     for(var layer = 0; layer < this.layers+2; layer++)
     {
-        if(layer == 0)
+        if(layer === 0)
         {
             this.processLayer(0, this.inputs, this.width);
         }
@@ -386,7 +387,7 @@ window.nn.NNet.prototype.propagate = function()
         }
         else
         {
-            this.processLayer(layers+1, this.width, this.outputs);
+            this.processLayer(this.layers, this.outputs, this.width);
         }
     }
 }
@@ -414,14 +415,13 @@ window.nn.backPropagate = function(layer, dl, outputNeuron, expectedValue, matri
 {
     if(layer === _this.layers+1)
     {
-        var deltaMatrix = window.nn.newWeightMatrix(_this.layers, _this.width, _this.inputs, _this.outputs);
-        var L = _this.L(expectedValue, _this.getOutputs()[outputNeuron]);
+        var deltaMatrix = window.nn.util.newWeightMatrix(_this.layers, _this.width, _this.inputs, _this.outputs);
         var dL = _this.dL(expectedValue, _this.getOutputs()[outputNeuron]);
-        return backPropagate(layer - 1, dL, outputNeuron, expectedValue, newMatrix, _this);
+        return window.nn.backPropagate(layer - 1, dL, outputNeuron, expectedValue, deltaMatrix, _this);
     }
-    else if(layer < _this.layers+1)
+    else if(layer < _this.layers)
     {
-        for(var node = 0; node < this.getNNodes(layer); node++)
+        for(var node = 0; node < _this.getNNodes(layer); node++)
         {
             //dL can be summarised as the error of the output node
             //dw gives us our contribution to the output node
@@ -438,7 +438,7 @@ window.nn.backPropagate = function(layer, dl, outputNeuron, expectedValue, matri
             _this.setWeight(layer, node, outputNeuron, Dw);
             _this.weights = wPtr;
 
-            var nm = backPropagate(layer-1, dL, node, 0, matrix, _this);
+            var nm = window.nn.backPropagate(layer-1, dL, node, 0, matrix, _this);
 
             if(node == this.getNNodes(layer)-1)
             {
@@ -486,11 +486,11 @@ window.nn.NNet.prototype.train = function(dataset)
     //dW = -alpha * dL * dphi(wt)
     //Change in loss with respect to any weight = phi(input*(loss of the neuron))
 
-    for(var data in dataset)
+    for(var i = 0; i < dataset.length; i++)
     {
+        var data = dataset[i];
         this.setInputs(data.inputs);
         this.propagate();
-
 
 
         var matrices = [];
@@ -506,4 +506,26 @@ window.nn.NNet.prototype.train = function(dataset)
             this.addMatrix(matrices[m]);
         }
     }
+}
+
+window.nn.NNet.prototype.calculateLoss = function(dataset)
+{
+    var losstotal = 0;
+    var noutputs = 0;
+
+    for(var i = 0; i < dataset.length; i++)
+    {
+      var data = dataset[i];
+      this.setInputs(data.inputs);
+      this.propagate();
+
+      for(var o = 0; o < this.outputs; o++)
+      {
+        console.log(this.L(data.outputs[o], this.getOutputs()[o]));
+        losstotal += this.L(data.outputs[o], this.getOutputs()[o]);
+        noutputs++;
+      }
+    }
+
+    return losstotal / noutputs;
 }
